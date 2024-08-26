@@ -12,26 +12,47 @@ class RaspberryPiCamera:
         time.sleep(2)  # Wait for camera to initialize
 
     def capture_image(self, filename="image.jpg"):
+        """
+        Capture an image and save it to the specified file.
+        """
         self.camera.capture_file(filename)
         return filename
 
     def set_resolution(self, width, height):
+        """
+        Set the resolution of the camera.
+        """
         config = self.camera.create_still_configuration(main={"size": (width, height)})
         self.camera.configure(config)
 
     def set_exposure_mode(self, mode):
+        """
+        Set the exposure mode of the camera.
+        """
         self.camera.set_controls({"AeMode": mode})
 
     def set_awb_mode(self, mode):
+        """
+        Set the auto white balance mode of the camera.
+        """
         self.camera.set_controls({"AwbMode": mode})
 
     def set_iso(self, iso):
+        """
+        Set the ISO value of the camera.
+        """
         self.camera.set_controls({"AnalogueGain": iso})
 
     def set_shutter_speed(self, speed):
+        """
+        Set the shutter speed of the camera.
+        """
         self.camera.set_controls({"ExposureTime": speed})
 
     def close(self):
+        """
+        Close the camera.
+        """
         self.camera.close()
 
 
