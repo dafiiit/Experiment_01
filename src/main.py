@@ -8,17 +8,32 @@ import numpy as np
 model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224")
 feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
 
+# Modell im Evaluierungsmodus mit aktiviertem Dropout (für Unsicherheitsmessung)
+model.eval()
+model.train()
+
 # Kamera initialisieren
 cap = cv2.VideoCapture(0)
 
 
-# Funktion zur Vorhersage
-def predict(frame):
+# Funktion zur Vorhersage mit Unsicherheitsabschätzung
+def predict_with_uncertainty(frame, num_samples=10):
     img = Image.fromarray(frame)
     inputs = feature_extractor(images=img, return_tensors="pt")
-    outputs = model(**inputs)
-    probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
-    return probs
+    logits = []
+
+    # Mehrfache Vorhersagen zur Unsicherheitsabschätzung
+    for _ in range(num_samples):
+        outputs = model(**inputs)
+        logits.append(outputs.logits.detach().numpy())
+
+    # Berechnung der mittleren Wahrscheinlichkeiten und der Unsicherheit (Varianz)
+    logits = np.array(logits)
+    probs = torch.nn.functional.softmax(torch.tensor(logits), dim=-1).numpy()
+    mean_probs = np.mean(probs, axis=0)
+    uncertainty_map = np.var(probs, axis=0).max(axis=-1)
+
+    return mean_probs, uncertainty_map
 
 
 # Funktion zur Anwendung der Unsicherheitskarte auf das Bild
@@ -39,10 +54,8 @@ while True:
     if not ret:
         break
 
-    # Vorhersage machen (hier kannst du die Unsicherheitskarte berechnen)
-    uncertainty_map = np.random.rand(
-        frame.shape[0], frame.shape[1]
-    )  # Beispielhafte Dummy-Unsicherheitskarte
+    # Vorhersage machen und Unsicherheitskarte berechnen
+    mean_probs, uncertainty_map = predict_with_uncertainty(frame)
 
     # Unsicherheitskarte auf das Bild anwenden
     output_frame = apply_uncertainty_overlay(frame, uncertainty_map)
