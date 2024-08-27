@@ -1,33 +1,31 @@
 import cv2
-from transformers import ViTForImageClassification, ViTFeatureExtractor
+from transformers import ViTForImageClassification, ViTImageProcessor
 from PIL import Image
 import torch
 import numpy as np
 
-# Modell und Feature Extractor laden
+# Load the model and feature extractor (now using ViTImageProcessor)
 model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224")
-feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+feature_extractor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
-# Modell im Evaluierungsmodus mit aktiviertem Dropout (für Unsicherheitsmessung)
-model.eval()
+# Model in train mode with dropout enabled for uncertainty estimation
 model.train()
 
-# Kamera initialisieren
+# Initialize the camera
 cap = cv2.VideoCapture(0)
 
-
-# Funktion zur Vorhersage mit Unsicherheitsabschätzung
+# Function to make a prediction with uncertainty estimation
 def predict_with_uncertainty(frame, num_samples=10):
     img = Image.fromarray(frame)
     inputs = feature_extractor(images=img, return_tensors="pt")
     logits = []
 
-    # Mehrfache Vorhersagen zur Unsicherheitsabschätzung
+    # Multiple predictions for uncertainty estimation
     for _ in range(num_samples):
         outputs = model(**inputs)
         logits.append(outputs.logits.detach().numpy())
 
-    # Berechnung der mittleren Wahrscheinlichkeiten und der Unsicherheit (Varianz)
+    # Calculate mean probabilities and uncertainty (variance)
     logits = np.array(logits)
     probs = torch.nn.functional.softmax(torch.tensor(logits), dim=-1).numpy()
     mean_probs = np.mean(probs, axis=0)
@@ -35,36 +33,34 @@ def predict_with_uncertainty(frame, num_samples=10):
 
     return mean_probs, uncertainty_map
 
-
-# Funktion zur Anwendung der Unsicherheitskarte auf das Bild
+# Function to apply the uncertainty map as an overlay on the image
 def apply_uncertainty_overlay(frame, uncertainty_map):
-    # Unsicherheitskarte auf die Größe des Bildes skalieren
+    # Resize uncertainty map to the size of the frame
     uncertainty_map = cv2.resize(uncertainty_map, (frame.shape[1], frame.shape[0]))
     overlay = (uncertainty_map * 255).astype(np.uint8)
 
-    # Farbkarte anwenden (von Blau (niedrig) zu Rot (hoch))
+    # Apply color map (from blue (low) to red (high))
     overlay_color = cv2.applyColorMap(overlay, cv2.COLORMAP_JET)
     result = cv2.addWeighted(frame, 0.7, overlay_color, 0.3, 0)
     return result
 
-
-# Hauptschleife für die Echtzeitverarbeitung
+# Main loop for real-time processing
 while True:
     ret, frame = cap.read()
     if not ret:
         break
 
-    # Vorhersage machen und Unsicherheitskarte berechnen
+    # Make a prediction and compute the uncertainty map
     mean_probs, uncertainty_map = predict_with_uncertainty(frame)
 
-    # Unsicherheitskarte auf das Bild anwenden
+    # Apply the uncertainty map to the frame
     output_frame = apply_uncertainty_overlay(frame, uncertainty_map)
 
-    # Bild anzeigen
+    # Display the frame
     cv2.imshow("Camera with Uncertainty", output_frame)
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
-# Ressourcen freigeben
+# Release resources
 cap.release()
 cv2.destroyAllWindows()
